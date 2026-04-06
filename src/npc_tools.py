@@ -42,7 +42,8 @@ NPC_TOOLS = [
         "description": (
             "Search your memories for something specific. Use this when the conversation "
             "touches on something you might have encountered before, or when you need to "
-            "know about a topic, person, or place."
+            "know about a topic, person, or place. This also finds things other NPCs "
+            "have told you — search by their name to see if they passed along any messages."
         ),
         "input_schema": {
             "type": "object",

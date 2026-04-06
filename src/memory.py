@@ -41,23 +41,47 @@ class MemoryManager:
         limit: int = 10,
         min_importance: int = 1,
     ) -> list[dict]:
-        """Retrieve memories, optionally filtered. Simple keyword matching for POC."""
-        sql = "SELECT * FROM memories WHERE npc_id = ? AND importance >= ?"
-        params: list = [npc_id, min_importance]
-
-        if category:
-            sql += " AND category = ?"
-            params.append(category)
-
+        """Retrieve memories using relevance-ranked keyword search.
+        Matches keywords against both content and tags. Results are ranked by
+        number of keyword hits (more matches = more relevant), then importance,
+        then recency. Requires at least one keyword match (OR logic, not AND)."""
         if query:
-            # Simple keyword search — good enough for POC
             keywords = query.lower().split()
+            # Build a relevance score: count how many keywords match in content OR tags
+            match_clauses = []
+            kw_params: list = []
             for kw in keywords:
-                sql += " AND LOWER(content) LIKE ?"
-                params.append(f"%{kw}%")
+                match_clauses.append(
+                    "(CASE WHEN LOWER(content) LIKE ? OR LOWER(tags) LIKE ? THEN 1 ELSE 0 END)"
+                )
+                kw_params.extend([f"%{kw}%", f"%{kw}%"])
 
-        sql += " ORDER BY importance DESC, timestamp DESC LIMIT ?"
-        params.append(limit)
+            relevance_expr = " + ".join(match_clauses)
+
+            # Parameter order must match SQL: SELECT relevance, WHERE npc_id, importance, relevance
+            sql = f"""SELECT *, ({relevance_expr}) AS relevance
+                      FROM memories
+                      WHERE npc_id = ? AND importance >= ? AND ({relevance_expr}) > 0"""
+            params: list = list(kw_params)  # for SELECT relevance
+            params.extend([npc_id, min_importance])  # for WHERE npc_id, importance
+            params.extend(kw_params)  # for WHERE relevance
+
+            if category:
+                sql += " AND category = ?"
+                params.append(category)
+
+            sql += " ORDER BY relevance DESC, importance DESC, timestamp DESC LIMIT ?"
+            params.append(limit)
+        else:
+            sql = "SELECT * FROM memories WHERE npc_id = ? AND importance >= ?"
+            params = [npc_id, min_importance]
+
+            if category:
+                sql += " AND category = ?"
+                params.append(category)
+
+            sql += " ORDER BY importance DESC, timestamp DESC LIMIT ?"
+            params.append(limit)
 
         rows = self.conn.execute(sql, params).fetchall()
         return [dict(r) for r in rows]

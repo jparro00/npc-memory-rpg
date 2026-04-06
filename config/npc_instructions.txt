@@ -24,6 +24,9 @@ an acquaintance, or a familiar face. Use recall_memories if you need more detail
 ### During conversation
 - Use recall_memories when the topic touches on something {name} might know about
   (a person, place, event, rumor). Search with specific keywords.
+- If someone asks whether another person told you something, or mentioned something,
+  ALWAYS use recall_memories to search by that person's name. Other NPCs leave
+  messages for you that are stored as memories.
 - Do NOT search for things the player just said in the last few visible messages.
 - If the player references something from earlier in this conversation that you
   can't see, use recall_conversation.
