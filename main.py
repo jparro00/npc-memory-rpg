@@ -75,9 +75,11 @@ def print_tool_log(tool_log: list[dict]):
 def main():
     api_key = os.environ.get("ANTHROPIC_API_KEY")
     if not api_key:
-        print("Error: Set ANTHROPIC_API_KEY environment variable first.")
-        print("  export ANTHROPIC_API_KEY=sk-ant-...")
-        sys.exit(1)
+        api_key = input("Enter your Anthropic API key: ").strip()
+        if not api_key:
+            print("No API key provided. Exiting.")
+            sys.exit(1)
+        os.environ["ANTHROPIC_API_KEY"] = api_key
 
     gm = GameMaster(api_key=api_key)
     seeded = gm.seed_if_needed()
