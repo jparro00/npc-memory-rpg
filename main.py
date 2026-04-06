@@ -118,11 +118,11 @@ def main():
 
                 elif cmd == "/talk":
                     if not arg:
-                        print("Usage: /talk <npc_id>")
+                        print("Usage: /talk <name>  (e.g. /talk Greta, /talk barkeeper)")
                         continue
-                    npc_id = arg.lower()
-                    if npc_id not in gm.agents:
-                        print(f"Unknown NPC: {npc_id}. Try /npcs to see available NPCs.")
+                    npc_id = gm.resolve_npc(arg)
+                    if not npc_id:
+                        print(f"Unknown NPC: {arg}. Try /npcs to see available NPCs.")
                         continue
                     gm.talk_to(npc_id)
                     gm.process_between_turns()
@@ -131,28 +131,38 @@ def main():
 
                 elif cmd == "/memories":
                     if not arg:
-                        print("Usage: /memories <npc_id>")
+                        print("Usage: /memories <name>  (e.g. /memories Greta)")
                         continue
-                    memories = gm.memory_mgr.get_all_memories(arg.lower())
+                    npc_id = gm.resolve_npc(arg)
+                    if not npc_id:
+                        print(f"Unknown NPC: {arg}. Try /npcs to see available NPCs.")
+                        continue
+                    name = gm.get_npc_display_name(npc_id)
+                    memories = gm.memory_mgr.get_all_memories(npc_id)
                     if not memories:
-                        print(f"No memories found for '{arg}'.")
+                        print(f"No memories found for {name}.")
                     else:
-                        print(f"\n── Memories for {arg} ({len(memories)} total) ──")
+                        print(f"\n── Memories for {name} ({len(memories)} total) ──")
                         for m in memories:
                             print(
                                 f"  [{m['category']}] (imp={m['importance']}) "
-                                f"{m['content'][:100]}"
+                                f"{m['content']}"
                             )
 
                 elif cmd == "/relations":
                     if not arg:
-                        print("Usage: /relations <npc_id>")
+                        print("Usage: /relations <name>  (e.g. /relations Sera)")
                         continue
-                    rels = gm.memory_mgr.get_all_relationships(arg.lower())
+                    npc_id = gm.resolve_npc(arg)
+                    if not npc_id:
+                        print(f"Unknown NPC: {arg}. Try /npcs to see available NPCs.")
+                        continue
+                    name = gm.get_npc_display_name(npc_id)
+                    rels = gm.memory_mgr.get_all_relationships(npc_id)
                     if not rels:
-                        print(f"No relationships found for '{arg}'.")
+                        print(f"No relationships found for {name}.")
                     else:
-                        print(f"\n── Relationships for {arg} ──")
+                        print(f"\n── Relationships for {name} ──")
                         for r in rels:
                             print(
                                 f"  {r['target']}: disposition={r['disposition']}/100, "

@@ -40,6 +40,20 @@ class GameMaster:
     def get_npc_display_name(self, npc_id: str) -> str:
         return self.agents[npc_id].npc_def["name"]
 
+    def resolve_npc(self, input_str: str) -> str | None:
+        """Resolve a player input to an npc_id. Accepts id, full name, or first name (case-insensitive)."""
+        key = input_str.lower().strip()
+        # Direct id match
+        if key in self.agents:
+            return key
+        # Match by full name or first name
+        for npc_id, agent in self.agents.items():
+            full_name = agent.npc_def["name"].lower()
+            first_name = full_name.split()[0]
+            if key == full_name or key == first_name:
+                return npc_id
+        return None
+
     def talk_to(self, npc_id: str):
         """Switch conversation to a different NPC."""
         if npc_id not in self.agents:
