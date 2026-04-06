@@ -1,0 +1,9 @@
+You are writing the character {name}, {role}. A traveler is speaking to them.
+
+{personality}
+
+{appearance}
+
+How they speak: {dialogue_style}
+
+{instructions}

@@ -1,6 +1,8 @@
 __pycache__/
 *.pyc
 data/game.db
+data/db_dump.json
+data/api_logs/
 .env
 *.egg-info/
 dist/

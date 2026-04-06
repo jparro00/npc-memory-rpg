@@ -2,6 +2,8 @@
 
 import sys
 import os
+import textwrap
+import shutil
 
 # Fix Windows console encoding
 if sys.platform == "win32":
@@ -12,6 +14,27 @@ if sys.platform == "win32":
         pass
 
 from src.game import GameMaster
+
+MARGIN = "    "
+
+
+def wrap_text(text: str, indent: str = MARGIN) -> str:
+    """Word-wrap text to fit the terminal, with consistent indentation."""
+    width = shutil.get_terminal_size((80, 24)).columns
+    wrap_width = max(40, width - len(indent) - 2)
+    lines = []
+    for paragraph in text.split("\n"):
+        if not paragraph.strip():
+            lines.append("")
+        else:
+            wrapped = textwrap.fill(
+                paragraph.strip(),
+                width=wrap_width,
+                initial_indent=indent,
+                subsequent_indent=indent,
+            )
+            lines.append(wrapped)
+    return "\n".join(lines)
 
 
 SCENE_INTRO = """
@@ -56,9 +79,7 @@ def print_tool_log(tool_log: list[dict]):
     print("\n  ┌─ [NPC Internal] ─────────────────────────")
     for entry in tool_log:
         tool = entry["tool"]
-        if tool == "internal_monologue":
-            print(f"  │ 💭 {entry['input'].get('thought', '')}")
-        elif tool == "save_memory":
+        if tool == "save_memory":
             print(f"  │ 📝 Saved: {entry['input'].get('content', '')[:80]}...")
         elif tool == "update_relationship":
             target = entry["input"].get("target", "?")
@@ -67,6 +88,12 @@ def print_tool_log(tool_log: list[dict]):
             print(f"  │ 📨 Message to {entry['input'].get('to_npc', '?')}")
         elif tool == "recall_memories":
             print(f"  │ 🔍 Searching memories for: {entry['input'].get('query', '')}")
+        elif tool == "check_relationship":
+            print(f"  │ 👤 Checking feelings about: {entry['input'].get('target', '?')}")
+        elif tool == "look_around":
+            print(f"  │ 👀 Looking around the tavern")
+        elif tool == "recall_conversation":
+            print(f"  │ 💬 Reviewing earlier conversation")
         else:
             print(f"  │ 🔧 {tool}")
     print("  └────────────────────────────────────────────\n")
@@ -173,6 +200,7 @@ def main():
 
                 elif cmd == "/reset":
                     from src.database import reset_db
+                    gm.shutdown()
                     reset_db()
                     gm = GameMaster(api_key=api_key)
                     gm.seed_if_needed()
@@ -189,11 +217,15 @@ def main():
                     continue
 
                 name = gm.get_npc_display_name(gm.current_npc)
-                print(f"\n[{name}]")
                 try:
                     dialogue, tool_log = gm.player_say(user_input)
                     print_tool_log(tool_log)
-                    print(dialogue)
+                    print()
+                    print(f"{MARGIN}{name}:")
+                    print(f"{MARGIN}{'─' * 50}")
+                    print(wrap_text(dialogue))
+                    print(f"{MARGIN}{'─' * 50}")
+                    print()
                 except Exception as e:
                     print(f"\n[Error communicating with {name}: {e}]")
 

@@ -78,14 +78,14 @@ class GameMaster:
         for npc_id, agent in self.agents.items():
             messages = self.memory_mgr.get_pending_messages(npc_id)
             for msg in messages:
-                # Convert delivered messages into memories for the receiving NPC
+                from_name = self.get_npc_display_name(msg["from_npc"]) if msg["from_npc"] in self.agents else msg["from_npc"]
                 self.memory_mgr.save_memory(
                     npc_id=npc_id,
-                    content=f"{msg['from_npc']} told me: {msg['content']}",
+                    content=f"{from_name} ({msg['from_npc']}) told me: {msg['content']}",
                     category="social",
                     source=msg["from_npc"],
-                    importance=6,
-                    tags=f"{msg['from_npc']},gossip",
+                    importance=7,
+                    tags=f"{msg['from_npc']},told me,message",
                 )
             self.memory_mgr.mark_messages_delivered(npc_id)
 

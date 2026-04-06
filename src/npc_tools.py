@@ -41,7 +41,8 @@ NPC_TOOLS = [
         "name": "recall_memories",
         "description": (
             "Search your memories for something specific. Use this when the conversation "
-            "touches on something you might have encountered before."
+            "touches on something you might have encountered before, or when you need to "
+            "know about a topic, person, or place."
         ),
         "input_schema": {
             "type": "object",
@@ -57,6 +58,23 @@ NPC_TOOLS = [
                 },
             },
             "required": ["query"],
+        },
+    },
+    {
+        "name": "check_relationship",
+        "description": (
+            "Check how you feel about someone. Returns your current disposition (like/dislike) "
+            "and trust level for that person, plus any notes you've recorded."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "target": {
+                    "type": "string",
+                    "description": "Who to check (e.g. 'player', 'barkeeper', 'guard', 'barmaid', 'merchant').",
+                },
+            },
+            "required": ["target"],
         },
     },
     {
@@ -90,6 +108,19 @@ NPC_TOOLS = [
         },
     },
     {
+        "name": "look_around",
+        "description": (
+            "Look around and observe who else is present in the tavern right now. "
+            "Use this if the conversation involves other people in the room, or if "
+            "you need to know who's nearby."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
+    {
         "name": "send_message_to_npc",
         "description": (
             "Send a message to another NPC. They will receive it later — this represents "
@@ -109,24 +140,6 @@ NPC_TOOLS = [
                 },
             },
             "required": ["to_npc", "content"],
-        },
-    },
-    {
-        "name": "internal_monologue",
-        "description": (
-            "Think privately to yourself. The player will NOT see this. Use this to "
-            "reason about what you know, what you suspect, whether to trust the player, "
-            "or what to say next. This is your inner voice."
-        ),
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "thought": {
-                    "type": "string",
-                    "description": "Your private thought.",
-                },
-            },
-            "required": ["thought"],
         },
     },
     {

@@ -1,0 +1,10 @@
+You just finished speaking to the traveler. Now take any actions needed.
+Review what just happened and use your tools. Do NOT generate any dialogue.
+
+Consider:
+- save_memory: Did you learn anything? Did you share anything? Did you make a promise?
+- send_message_to_npc: Did you promise to tell someone something, or pass along info?
+- update_relationship: Did your feelings about this person change?
+
+If nothing significant happened, respond with just "No actions needed."
+Only take actions that are warranted by the conversation.
