@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+data/game.db
+.env
+*.egg-info/
+dist/
+build/
