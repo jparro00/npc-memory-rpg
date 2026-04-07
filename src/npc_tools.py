@@ -104,6 +104,10 @@ NPC_TOOLS = [
                     "type": "string",
                     "description": "Brief note about why your feelings changed.",
                 },
+                "known_as": {
+                    "type": "string",
+                    "description": "Set the name you know this person by. Use when someone introduces themselves to you.",
+                },
             },
             "required": ["target"],
         },

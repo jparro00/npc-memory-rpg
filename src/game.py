@@ -1,14 +1,21 @@
 """Game master orchestrator — manages the game loop, NPC routing, and between-turn processing."""
 
 import anthropic
+from enum import Enum
 from pathlib import Path
 
 from .database import init_db
 from .memory import MemoryManager
 from .npc_agent import NPCAgent, load_npc_definition
+from .gm_agent import GMAgent
 from .seed import seed_initial_data
 
 NPCS_DIR = Path(__file__).parent.parent / "npcs"
+
+
+class GameMode(Enum):
+    FREE_ROAM = "free_roam"
+    NPC_CONVERSATION = "npc_conversation"
 
 
 class GameMaster:
@@ -19,12 +26,16 @@ class GameMaster:
         self.memory_mgr = MemoryManager()
         self.agents: dict[str, NPCAgent] = {}
         self.current_npc: str = None
+        self.mode = GameMode.FREE_ROAM
         self.turn_count = 0
 
         # Load all NPC agents
         for yaml_file in NPCS_DIR.glob("*.yaml"):
             npc_id = yaml_file.stem
             self.agents[npc_id] = NPCAgent(npc_id, self.memory_mgr, self.client)
+
+        # Initialize GM agent
+        self.gm = GMAgent(self.memory_mgr, api_key=api_key)
 
     def seed_if_needed(self):
         """Seed initial data if the database is empty."""
@@ -39,6 +50,16 @@ class GameMaster:
 
     def get_npc_display_name(self, npc_id: str) -> str:
         return self.agents[npc_id].npc_def["name"]
+
+    def get_location_name(self) -> str:
+        """Return the display name of the current location."""
+        from . import world_data
+        loc = world_data.load_location(self.gm.current_location)
+        return loc["name"] if loc else "Unknown"
+
+    def get_scene_description(self) -> str:
+        """Get a formatted scene description. No LLM call."""
+        return self.gm.get_scene_description()
 
     def resolve_npc(self, input_str: str) -> str | None:
         """Resolve a player input to an npc_id. Accepts id, full name, or first name (case-insensitive)."""
@@ -55,14 +76,29 @@ class GameMaster:
         return None
 
     def talk_to(self, npc_id: str):
-        """Switch conversation to a different NPC."""
+        """Switch to NPC conversation mode."""
         if npc_id not in self.agents:
             raise ValueError(f"Unknown NPC: {npc_id}")
         if self.current_npc and self.current_npc != npc_id:
-            # Auto-summarize the conversation before walking away
             self.agents[self.current_npc].summarize_and_save()
             self.agents[self.current_npc].reset_conversation()
         self.current_npc = npc_id
+        self.mode = GameMode.NPC_CONVERSATION
+        # Inject scene events so the NPC knows what just happened
+        self.agents[npc_id].pending_scene_events = self.gm.get_scene_events()
+
+    def leave_conversation(self) -> str:
+        """Leave current NPC conversation, return to free roam.
+        Returns a brief transition message."""
+        if self.current_npc:
+            npc_name = self.get_npc_display_name(self.current_npc)
+            self.agents[self.current_npc].summarize_and_save()
+            self.agents[self.current_npc].reset_conversation()
+            self.current_npc = None
+            self.mode = GameMode.FREE_ROAM
+            return f"You step away from {npc_name}."
+        self.mode = GameMode.FREE_ROAM
+        return ""
 
     def player_say(self, message: str) -> tuple[str, list[dict]]:
         """Send a player message to the current NPC and return their response."""
@@ -72,6 +108,10 @@ class GameMaster:
         agent = self.agents[self.current_npc]
         dialogue, tool_log = agent.respond(message)
         return dialogue, tool_log
+
+    def free_roam_input(self, message: str) -> tuple[str, list[dict]]:
+        """Handle freeform input in free roam mode via the GM agent."""
+        return self.gm.narrate(message)
 
     def process_between_turns(self):
         """Process NPC-to-NPC messages — deliver pending messages as memories."""

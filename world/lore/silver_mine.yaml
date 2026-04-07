@@ -1,0 +1,15 @@
+id: silver_mine
+name: The Greypeak Silver Mine
+type: location_lore
+
+summary: >
+  An abandoned mine in the hills above Millhaven, closed after a collapse
+  ten years ago.
+
+details:
+  - Eight miners died in the collapse. The mine was sealed by order of the mayor.
+  - Locals consider it cursed. Children dare each other to approach the entrance.
+  - Recently, farmhands have reported strange lights near the entrance at night.
+  - A cloaked stranger arrived in town asking about "what was buried before the silver."
+  - The mine was the source of Millhaven's prosperity for two generations.
+  - Some townsfolk believe the collapse was not an accident.

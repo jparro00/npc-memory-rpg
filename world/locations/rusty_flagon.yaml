@@ -1,0 +1,62 @@
+id: rusty_flagon
+name: The Rusty Flagon
+type: tavern
+
+description: |
+  A weathered tavern at the crossroads of Millhaven's two main streets.
+  The building leans slightly, as if the years have made it tired, but warm
+  light spills from its windows and the sound of voices carries through the
+  heavy oak door.
+
+atmosphere: |
+  Warm candlelight flickers across rough-hewn tables. The air smells of
+  wood smoke, stew, and old ale. A low murmur of conversation fills the
+  room, punctuated by the occasional bark of laughter or scrape of a chair.
+
+objects:
+  bar:
+    description: >
+      A heavy oak bar, scarred by years of tankards and knife-marks.
+      Bottles line the shelves behind it in no particular order. A copper
+      tap juts from a barrel at one end.
+    interactive: true
+  fireplace:
+    description: >
+      A wide stone fireplace dominates the far wall. The fire has burned
+      down to glowing coals, casting shifting orange light across the
+      nearest tables. An iron poker leans against the hearth.
+    interactive: true
+  notice_board:
+    description: >
+      A board near the entrance, covered in pinned notices and scraps of
+      parchment. Most are mundane — a lost goat, someone selling firewood —
+      but a few look official, bearing the mayor's seal.
+    interactive: true
+  stairs:
+    description: >
+      A narrow wooden staircase climbs to the upper floor, where the tavern
+      rents a handful of rooms. The steps creak with the memory of a
+      thousand boots.
+    interactive: true
+  tables:
+    description: >
+      Scattered round tables of varying size, most showing the stains and
+      scars of heavy use. A few stools lie tipped on their sides from the
+      evening's earlier crowd.
+    interactive: false
+  door:
+    description: >
+      The heavy front door, banded with iron and fitted with a latch that
+      sticks. Cold air seeps through the gap at the bottom.
+    interactive: true
+
+npcs_present:
+  - barkeeper
+  - guard
+  - merchant
+  - barmaid
+
+exits:
+  outside:
+    description: The heavy oak door leads out to Millhaven's main street.
+    destination: null

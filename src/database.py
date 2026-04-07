@@ -46,6 +46,7 @@ def init_db():
             disposition INTEGER DEFAULT 50 CHECK(disposition BETWEEN 0 AND 100),
             trust INTEGER DEFAULT 50 CHECK(trust BETWEEN 0 AND 100),
             notes TEXT DEFAULT '',
+            known_as TEXT DEFAULT NULL,   -- name this NPC knows the target by
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             UNIQUE(npc_id, target)
         );
@@ -69,6 +70,14 @@ def init_db():
         );
     """)
     conn.commit()
+
+    # Migration: add known_as column if upgrading from older schema
+    try:
+        conn.execute("ALTER TABLE relationships ADD COLUMN known_as TEXT DEFAULT NULL")
+        conn.commit()
+    except Exception:
+        pass  # Column already exists
+
     conn.close()
 
 

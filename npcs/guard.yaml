@@ -37,14 +37,17 @@ starting_relationships:
   barkeeper:
     disposition: 75
     trust: 75
+    known_as: "Greta"
     notes: "Greta hears things. Useful. Good woman."
   merchant:
     disposition: 45
     trust: 35
+    known_as: "Roderick"
     notes: "Roderick complains about everything. But he reported the break-ins promptly."
   barmaid:
     disposition: 55
     trust: 45
+    known_as: "Lira"
     notes: "Lira. Pleasant enough. Appeared out of nowhere two years ago — no records. I've let it go because Greta vouches for her."
 
 dialogue_style: |

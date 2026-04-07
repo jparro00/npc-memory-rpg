@@ -109,7 +109,17 @@ def load_npc_definition(npc_id: str) -> dict:
 
 
 def get_scene_description(current_npc_id: str) -> str:
-    """Return a description of who else is present — called via look_around tool."""
+    """Return a description of who else is present — called via look_around tool.
+    Uses world data for location info, falls back to NPC definitions."""
+    from . import world_data
+
+    # Try to get location data for atmosphere
+    loc = world_data.load_location("rusty_flagon")
+    parts = []
+    if loc:
+        parts.append(loc.get("atmosphere", "").strip())
+
+    # List other NPCs present
     all_npcs = load_all_npc_definitions()
     others = []
     for npc_id, npc_def in all_npcs.items():
@@ -119,9 +129,12 @@ def get_scene_description(current_npc_id: str) -> str:
             f"- {npc_def['name']} ({npc_id}): {npc_def['role']}. "
             f"{npc_def.get('appearance', '').strip().split(chr(10))[0]}"
         )
-    if not others:
+    if others:
+        parts.append("You see:\n" + "\n".join(others))
+    elif not parts:
         return "You don't see anyone else around."
-    return "You see:\n" + "\n".join(others)
+
+    return "\n\n".join(parts)
 
 
 def build_system_prompt(npc_def: dict, memory_mgr: MemoryManager) -> str:
@@ -210,6 +223,7 @@ def execute_tool(npc_id: str, tool_name: str, tool_input: dict, memory_mgr: Memo
             disposition=tool_input.get("disposition"),
             trust=tool_input.get("trust"),
             notes=tool_input.get("notes"),
+            known_as=tool_input.get("known_as"),
         )
         return f"Relationship updated: disposition={rel['disposition']}, trust={rel['trust']}."
 
@@ -265,10 +279,13 @@ class NPCAgent:
         self.full_history: list[dict] = []
         # Working history — only recent exchanges, sent to the API
         self.working_history: list[dict] = []
+        # Scene events to inject on first message (set by GameMaster.talk_to)
+        self.pending_scene_events: list = []
 
     def reset_conversation(self):
         self.full_history = []
         self.working_history = []
+        self.pending_scene_events = []
 
     def _trim_working_history(self):
         """Trim working_history to only keep the last N player exchanges.
@@ -346,17 +363,46 @@ class NPCAgent:
                 tags="player,conversation",
             )
 
-    def _build_first_message_context(self) -> str:
+    MAX_SCENE_EVENTS = 10
+
+    def _resolve_actor_for_npc(self, actor: str) -> str:
+        """Resolve a system actor ID into text appropriate for this NPC's knowledge.
+
+        For 'player': uses known_as name, or 'a person you recognize', or 'someone'.
+        For NPC IDs: uses the NPC's display name.
+        For 'environment': returns empty string (description stands alone).
+        """
+        if actor == "player":
+            rel = self.memory_mgr.get_relationship(self.npc_id, "player")
+            if rel:
+                known_as = rel.get("known_as")
+                if known_as:
+                    return known_as
+                return "a person you recognize"
+            return "someone"
+        elif actor == "environment":
+            return ""
+        else:
+            # NPC actor — resolve to display name
+            try:
+                npc_def = load_npc_definition(actor)
+                return npc_def["name"]
+            except Exception:
+                return actor
+
+    def _build_first_message_context(self, scene_events: list = None) -> str:
         """Build automatic context for the first message of a conversation.
-        Checks relationship with player and retrieves recent player-related memories
-        so the NPC doesn't need a tool round-trip to know who they're talking to."""
+        Checks relationship with player, retrieves recent player-related memories,
+        and injects any recent scene events with resolved actor identities."""
         parts = []
 
         # Check relationship
         rel = self.memory_mgr.get_relationship(self.npc_id, "player")
         if rel:
+            known_as = rel.get("known_as")
+            known_str = f" You know them as {known_as}." if known_as else ""
             parts.append(
-                f"[Context: You know this person. "
+                f"[Context: You know this person.{known_str} "
                 f"disposition={rel['disposition']}/100, trust={rel['trust']}/100. "
                 f"Notes: {rel['notes']}]"
             )
@@ -371,6 +417,27 @@ class NPCAgent:
             parts.append("[Your recent memories about this person:]")
             for m in memories:
                 parts.append(f"- {m['content']}")
+
+        # Inject scene events with resolved actor identities
+        if scene_events:
+            events_to_show = scene_events[-self.MAX_SCENE_EVENTS:]
+            event_lines = []
+            player_was_actor = False
+            for event in events_to_show:
+                actor_name = self._resolve_actor_for_npc(event.actor)
+                if event.actor == "environment" or not actor_name:
+                    event_lines.append(f"- {event.description}")
+                else:
+                    event_lines.append(f"- {actor_name} {event.description}")
+                if event.actor == "player":
+                    player_was_actor = True
+
+            parts.append("[Moments ago, you witnessed:]")
+            parts.extend(event_lines)
+
+            if player_was_actor:
+                actor_name = self._resolve_actor_for_npc("player")
+                parts.append(f"[That same person ({actor_name}) is now speaking with you.]")
 
         return "\n".join(parts)
 
@@ -429,11 +496,21 @@ class NPCAgent:
           1. Dialogue phase — NPC reads tools, thinks, responds with speech
           2. Action phase — NPC saves memories, sends messages, updates relationships
         """
-        # On first message, prepend relationship and memory context
+        # On first message, prepend relationship/memory/scene context
         is_first_message = len(self.full_history) == 0
         if is_first_message:
-            context = self._build_first_message_context()
-            player_message = f"{context}\n\nThe traveler says: {player_message}"
+            context = self._build_first_message_context(
+                scene_events=self.pending_scene_events
+            )
+            self.pending_scene_events = []  # consumed
+
+            # Use the name this NPC knows the player by, if any
+            rel = self.memory_mgr.get_relationship(self.npc_id, "player")
+            if rel and rel.get("known_as"):
+                speaker_label = rel["known_as"]
+            else:
+                speaker_label = "The traveler"
+            player_message = f"{context}\n\n{speaker_label} says: {player_message}"
 
         user_msg = {"role": "user", "content": player_message}
         self.full_history.append(user_msg)

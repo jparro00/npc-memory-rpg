@@ -23,6 +23,7 @@ def seed_initial_data(memory_mgr: MemoryManager):
                 disposition=rel.get("disposition", 50),
                 trust=rel.get("trust", 50),
                 notes=rel.get("notes", ""),
+                known_as=rel.get("known_as"),
             )
 
         # Seed base knowledge as semantic memories

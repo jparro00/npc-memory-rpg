@@ -44,14 +44,17 @@ starting_relationships:
   guard:
     disposition: 75
     trust: 80
+    known_as: "Sera"
     notes: "Sera is a good woman. Reliable. Tells me things sometimes."
   merchant:
     disposition: 60
     trust: 45
+    known_as: "Roderick"
     notes: "Roderick is useful but always angling for something."
   barmaid:
     disposition: 90
     trust: 80
+    known_as: "Lira"
     notes: "Lira's like a daughter to me. Smart girl. Hiding something, but who isn't?"
 
 dialogue_style: |

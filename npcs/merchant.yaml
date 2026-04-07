@@ -41,14 +41,17 @@ starting_relationships:
   barkeeper:
     disposition: 65
     trust: 50
+    known_as: "Greta"
     notes: "Greta tolerates me. Room and board are fair. Don't push it."
   guard:
     disposition: 40
     trust: 30
+    known_as: "Sera"
     notes: "Sera is too nosy. Keep her at arm's length."
   barmaid:
     disposition: 70
     trust: 40
+    known_as: "Lira"
     notes: "Lira's easy on the eyes and sharp as a tack. She notices too much. Fun to flirt with but I watch what I say around her."
 
 dialogue_style: |

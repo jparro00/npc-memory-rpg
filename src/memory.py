@@ -116,26 +116,30 @@ class MemoryManager:
         disposition: Optional[int] = None,
         trust: Optional[int] = None,
         notes: Optional[str] = None,
+        known_as: Optional[str] = None,
     ) -> dict:
         existing = self.get_relationship(npc_id, target)
         if existing:
             d = disposition if disposition is not None else existing["disposition"]
             t = trust if trust is not None else existing["trust"]
             n = notes if notes is not None else existing["notes"]
+            k = known_as if known_as is not None else existing.get("known_as")
             self.conn.execute(
                 """UPDATE relationships
-                   SET disposition=?, trust=?, notes=?, updated_at=CURRENT_TIMESTAMP
+                   SET disposition=?, trust=?, notes=?, known_as=?,
+                       updated_at=CURRENT_TIMESTAMP
                    WHERE npc_id=? AND target=?""",
-                (min(max(d, 0), 100), min(max(t, 0), 100), n, npc_id, target),
+                (min(max(d, 0), 100), min(max(t, 0), 100), n, k, npc_id, target),
             )
         else:
             d = disposition if disposition is not None else 50
             t = trust if trust is not None else 50
             n = notes or ""
+            k = known_as
             self.conn.execute(
-                """INSERT INTO relationships (npc_id, target, disposition, trust, notes)
-                   VALUES (?, ?, ?, ?, ?)""",
-                (npc_id, target, min(max(d, 0), 100), min(max(t, 0), 100), n),
+                """INSERT INTO relationships (npc_id, target, disposition, trust, notes, known_as)
+                   VALUES (?, ?, ?, ?, ?, ?)""",
+                (npc_id, target, min(max(d, 0), 100), min(max(t, 0), 100), n, k),
             )
         self.conn.commit()
         return self.get_relationship(npc_id, target)

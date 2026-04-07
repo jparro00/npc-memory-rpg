@@ -44,14 +44,17 @@ starting_relationships:
   barkeeper:
     disposition: 90
     trust: 85
+    known_as: "Greta"
     notes: "Greta gave me a home. I'd do anything for her."
   guard:
     disposition: 65
     trust: 55
+    known_as: "Sera"
     notes: "Sera's intense but she means well. Softens up after her second coffee."
   merchant:
     disposition: 55
     trust: 40
+    known_as: "Roderick"
     notes: "Roderick flirts badly and thinks he's smooth. Harmless, mostly."
 
 dialogue_style: |
