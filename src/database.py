@@ -68,6 +68,20 @@ def init_db():
             value TEXT NOT NULL,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
+
+        CREATE TABLE IF NOT EXISTS world_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp INTEGER NOT NULL,
+            content TEXT NOT NULL,
+            source_npc TEXT,         -- which NPC this originated from (or 'gm')
+            event_type TEXT DEFAULT 'event',  -- 'event', 'conversation_summary'
+            importance INTEGER DEFAULT 5 CHECK(importance BETWEEN 1 AND 10),
+            tags TEXT DEFAULT '',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_world_events_time
+            ON world_events(timestamp DESC);
     """)
     conn.commit()
 

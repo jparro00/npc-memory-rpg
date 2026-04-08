@@ -14,6 +14,9 @@ class MemoryManager:
 
     # ── Memories ──────────────────────────────────────────────────────
 
+    # Threshold: NPC memories at or above this importance auto-propagate to world events
+    WORLD_EVENT_THRESHOLD = 7
+
     def save_memory(
         self,
         npc_id: str,
@@ -25,12 +28,24 @@ class MemoryManager:
         game_time: Optional[int] = None,
     ) -> int:
         ts = game_time or int(time.time())
+        clamped_importance = min(max(importance, 1), 10)
         cur = self.conn.execute(
             """INSERT INTO memories (npc_id, timestamp, category, content, source, importance, tags)
                VALUES (?, ?, ?, ?, ?, ?, ?)""",
-            (npc_id, ts, category, content, source, min(max(importance, 1), 10), tags),
+            (npc_id, ts, category, content, source, clamped_importance, tags),
         )
         self.conn.commit()
+
+        # Auto-propagate significant memories to the world events log
+        if clamped_importance >= self.WORLD_EVENT_THRESHOLD and source != "base_knowledge":
+            self.log_world_event(
+                content=f"[{npc_id}] {content}",
+                source_npc=npc_id,
+                event_type="event",
+                importance=clamped_importance,
+                tags=tags,
+            )
+
         return cur.lastrowid
 
     def recall_memories(
@@ -190,3 +205,56 @@ class MemoryManager:
             (key, value),
         )
         self.conn.commit()
+
+    # ── World Events (GM-accessible plot log) ─────────────────────────
+
+    def log_world_event(
+        self,
+        content: str,
+        source_npc: str = "gm",
+        event_type: str = "event",
+        importance: int = 5,
+        tags: str = "",
+    ) -> int:
+        ts = int(time.time())
+        cur = self.conn.execute(
+            """INSERT INTO world_events (timestamp, content, source_npc, event_type, importance, tags)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (ts, content, source_npc, event_type, min(max(importance, 1), 10), tags),
+        )
+        self.conn.commit()
+        return cur.lastrowid
+
+    def recall_world_events(
+        self,
+        query: Optional[str] = None,
+        limit: int = 10,
+        min_importance: int = 1,
+    ) -> list[dict]:
+        """Search world events using keyword relevance ranking (same logic as NPC memories)."""
+        if query:
+            keywords = query.lower().split()
+            match_clauses = []
+            kw_params: list = []
+            for kw in keywords:
+                match_clauses.append(
+                    "(CASE WHEN LOWER(content) LIKE ? OR LOWER(tags) LIKE ? THEN 1 ELSE 0 END)"
+                )
+                kw_params.extend([f"%{kw}%", f"%{kw}%"])
+
+            relevance_expr = " + ".join(match_clauses)
+            sql = f"""SELECT *, ({relevance_expr}) AS relevance
+                      FROM world_events
+                      WHERE importance >= ? AND ({relevance_expr}) > 0"""
+            params: list = list(kw_params)
+            params.append(min_importance)
+            params.extend(kw_params)
+
+            sql += " ORDER BY relevance DESC, importance DESC, timestamp DESC LIMIT ?"
+            params.append(limit)
+        else:
+            sql = "SELECT * FROM world_events WHERE importance >= ? ORDER BY importance DESC, timestamp DESC LIMIT ?"
+            params = [min_importance, limit]
+
+        rows = self.conn.execute(sql, params).fetchall()
+        return [dict(r) for r in rows]

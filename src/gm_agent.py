@@ -1,7 +1,9 @@
 """GM Agent — handles world narration, environment descriptions, and non-NPC interactions."""
 
 import anthropic
+import re
 import time
+import yaml
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -9,6 +11,8 @@ from .memory import MemoryManager
 from .gm_tools import GM_TOOLS
 from .npc_agent import _log_api_call, load_all_npc_definitions, _load_template
 from . import world_data
+
+NPCS_DIR = Path(__file__).parent.parent / "npcs"
 
 
 @dataclass
@@ -26,10 +30,23 @@ MAX_GM_HISTORY = 6  # 3 player inputs + 3 GM responses
 
 
 def build_gm_system_prompt(location_id: str) -> str:
-    """Build the GM system prompt from templates."""
+    """Build the GM system prompt from templates, injecting current location."""
     instructions = _load_template("gm_instructions.txt")
     template = _load_template("gm_system_prompt.txt")
-    return template.format(instructions=instructions)
+
+    loc = world_data.load_location(location_id)
+    if loc:
+        location_name = loc["name"]
+        location_atmosphere = loc.get("atmosphere", "").strip()
+    else:
+        location_name = location_id
+        location_atmosphere = ""
+
+    return template.format(
+        instructions=instructions,
+        location_name=location_name,
+        location_atmosphere=location_atmosphere,
+    )
 
 
 def execute_gm_tool(
@@ -110,18 +127,57 @@ def execute_gm_tool(
         )
         return f"Event logged: {event.description}"
 
+    elif tool_name == "recall_world_events":
+        results = memory_mgr.recall_world_events(
+            query=tool_input.get("query"),
+            limit=10,
+            min_importance=1,
+        )
+        if not results:
+            return "No world events found for that query."
+        lines = []
+        for evt in results:
+            source = evt.get("source_npc", "?")
+            etype = evt.get("event_type", "event")
+            lines.append(f"- [{etype}] (from {source}, imp={evt['importance']}) {evt['content']}")
+        return "\n".join(lines)
+
+    elif tool_name == "create_npc":
+        if gm_agent is None:
+            return "Error: No GM agent context available."
+        return gm_agent.create_npc(tool_input, location_id)
+
+    elif tool_name == "start_conversation":
+        if gm_agent is None:
+            return "Error: No GM agent context available."
+        npc_id = tool_input["npc_id"]
+        # Check the NPC actually exists at this location
+        npc_ids = world_data.get_npcs_at_location(location_id)
+        if npc_id not in npc_ids:
+            all_npcs = load_all_npc_definitions()
+            if npc_id not in all_npcs:
+                return f"Error: NPC '{npc_id}' does not exist."
+            return f"Error: NPC '{npc_id}' is not at this location."
+        gm_agent.pending_action = {"type": "talk", "npc_id": npc_id}
+        all_npcs = load_all_npc_definitions()
+        name = all_npcs[npc_id]["name"]
+        return f"Starting conversation with {name}."
+
     return f"Unknown tool: {tool_name}"
 
 
 class GMAgent:
     """Game Master agent — narrates the world and handles non-NPC interactions."""
 
-    def __init__(self, memory_mgr: MemoryManager, api_key: str):
+    def __init__(self, memory_mgr: MemoryManager, api_key: str, register_npc_fn=None):
         self.memory_mgr = memory_mgr
         self.client = anthropic.Anthropic(api_key=api_key)
         self.current_location = "rusty_flagon"
         self.working_history: list[dict] = []
         self.scene_events: list[SceneEvent] = []
+        self.register_npc_fn = register_npc_fn
+        # Pending game action — checked by main.py after narrate() returns
+        self.pending_action: dict | None = None
 
     def get_scene_description(self) -> str:
         """Render location description from YAML. No LLM call."""
@@ -148,7 +204,7 @@ class GMAgent:
         for _ in range(MAX_ITERATIONS):
             response = self.client.messages.create(
                 model=GM_MODEL,
-                max_tokens=300,
+                max_tokens=1024,
                 system=system_prompt,
                 tools=GM_TOOLS,
                 messages=self.working_history,
@@ -203,6 +259,84 @@ class GMAgent:
     def clear_scene_events(self):
         """Clear events — called when the player changes location."""
         self.scene_events = []
+
+    # ── Dynamic NPC Creation ──────────────────────────────────────
+
+    def create_npc(self, tool_input: dict, location_id: str) -> str:
+        """Create a new NPC: write YAML, seed data, register agent."""
+        npc_id = tool_input["id"]
+
+        # Validate ID format
+        if not re.match(r"^[a-z][a-z0-9_]*$", npc_id):
+            return (
+                f"Error: Invalid NPC id '{npc_id}'. "
+                "Use lowercase letters, digits, and underscores only."
+            )
+
+        # Check for collision
+        yaml_path = NPCS_DIR / f"{npc_id}.yaml"
+        all_npcs = load_all_npc_definitions()
+        if npc_id in all_npcs or yaml_path.exists():
+            return f"Error: NPC '{npc_id}' already exists."
+
+        # Build NPC definition
+        npc_def = {
+            "id": npc_id,
+            "name": tool_input["name"],
+            "role": tool_input["role"],
+            "model": GM_MODEL,
+            "personality": tool_input["personality"],
+            "appearance": tool_input["appearance"],
+            "dialogue_style": tool_input["dialogue_style"],
+            "location": location_id,
+            "starting_relationships": {
+                "player": {
+                    "disposition": 50,
+                    "trust": 50,
+                    "notes": "Just met.",
+                }
+            },
+            "base_knowledge": tool_input.get("base_knowledge", []),
+        }
+
+        # Write YAML to disk
+        with open(yaml_path, "w", encoding="utf-8") as f:
+            yaml.dump(
+                npc_def, f,
+                default_flow_style=False, allow_unicode=True, sort_keys=False,
+            )
+
+        # Add to NPC definitions cache
+        all_npcs[npc_id] = npc_def
+
+        # Seed player relationship
+        self.memory_mgr.update_relationship(
+            npc_id=npc_id,
+            target="player",
+            disposition=50,
+            trust=50,
+            notes="Just met.",
+        )
+
+        # Seed base knowledge
+        for fact in npc_def.get("base_knowledge", []):
+            self.memory_mgr.save_memory(
+                npc_id=npc_id,
+                content=fact,
+                category="semantic",
+                source="base_knowledge",
+                importance=7,
+                tags="world,starting",
+            )
+
+        # Add to location
+        world_data.add_npc_to_location(location_id, npc_id)
+
+        # Register live agent via callback
+        if self.register_npc_fn:
+            self.register_npc_fn(npc_id)
+
+        return f"Created NPC '{npc_def['name']}' ({npc_id}) at {location_id}."
 
     # ── Internal ──────────────────────────────────────────────────
 

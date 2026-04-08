@@ -134,4 +134,99 @@ GM_TOOLS = [
             "required": ["description", "actor"],
         },
     },
+    {
+        "name": "create_npc",
+        "description": (
+            "Create a new NPC character in the current scene. Use this when the "
+            "narrative naturally introduces a new character who doesn't already exist "
+            "(a traveler walks in, a townsfolk is mentioned and needs to become "
+            "interactable). Check get_npc_presence first to avoid duplicates. "
+            "Keep personality, appearance, and dialogue_style to 2-3 sentences each."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string",
+                    "description": (
+                        "Unique snake_case identifier, e.g. 'old_finn', 'hooded_stranger'. "
+                        "Lowercase letters, digits, and underscores only."
+                    ),
+                },
+                "name": {
+                    "type": "string",
+                    "description": "Display name, e.g. 'Old Finn'.",
+                },
+                "role": {
+                    "type": "string",
+                    "description": "Brief role, e.g. 'Retired soldier and tavern regular'.",
+                },
+                "personality": {
+                    "type": "string",
+                    "description": "2-3 sentences describing personality and demeanor.",
+                },
+                "appearance": {
+                    "type": "string",
+                    "description": "2-3 sentences describing physical appearance.",
+                },
+                "dialogue_style": {
+                    "type": "string",
+                    "description": (
+                        "2-3 sentences describing how they speak: sentence length, "
+                        "vocabulary, verbal tics, accent, body language during conversation. "
+                        "E.g. 'Speaks in short, clipped sentences. Avoids eye contact. "
+                        "Taps the table when nervous.'"
+                    ),
+                },
+                "base_knowledge": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": (
+                        "Facts this NPC knows — their backstory, what brought them here, "
+                        "opinions, rumors they've heard. Include at least 3-5 facts so "
+                        "the NPC has something to talk about."
+                    ),
+                },
+            },
+            "required": ["id", "name", "role", "personality", "appearance", "dialogue_style", "base_knowledge"],
+        },
+    },
+    {
+        "name": "start_conversation",
+        "description": (
+            "Start a conversation between the player and an NPC. Use this when "
+            "the player wants to talk to someone — e.g. 'talk to this girl', "
+            "'I want to speak with the merchant', 'can I ask her something'. "
+            "Use get_npc_presence first if you need to identify who the player means."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "npc_id": {
+                    "type": "string",
+                    "description": "The npc_id of the character to talk to (e.g. 'barkeeper', 'barmaid').",
+                },
+            },
+            "required": ["npc_id"],
+        },
+    },
+    {
+        "name": "recall_world_events",
+        "description": (
+            "Search the world event log for significant things that have happened "
+            "in the game — NPC conversations, dramatic events, plot developments. "
+            "Use this when you need context about what the player has been doing, "
+            "who they've talked to, or what has happened in the world."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Keywords to search for (e.g. 'goblin mines', 'cindy', 'burglars').",
+                },
+            },
+            "required": ["query"],
+        },
+    },
 ]

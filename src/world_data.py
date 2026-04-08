@@ -114,3 +114,15 @@ def get_npcs_at_location(location_id: str) -> list[str]:
     if not loc:
         return []
     return loc.get("npcs_present", [])
+
+
+def add_npc_to_location(location_id: str, npc_id: str):
+    """Add an NPC to a location's in-memory npcs_present list.
+    Does NOT modify the location YAML file on disk."""
+    loc = load_location(location_id)
+    if loc is None:
+        return
+    npcs_present = loc.get("npcs_present", [])
+    if npc_id not in npcs_present:
+        npcs_present.append(npc_id)
+        loc["npcs_present"] = npcs_present

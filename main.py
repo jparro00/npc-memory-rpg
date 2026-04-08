@@ -1,5 +1,6 @@
 """Main entry point — terminal-based game loop with modal prompts."""
 
+import re
 import sys
 import os
 import textwrap
@@ -92,6 +93,18 @@ def print_tool_log(tool_log: list[dict], source: str = "NPC"):
             actor = entry['input'].get('actor', '?')
             desc = entry['input'].get('description', '')[:80]
             print(f"  │ 📢 Event [{actor}]: {desc}")
+        elif tool == "create_npc":
+            name = entry['input'].get('name', '?')
+            npc_id = entry['input'].get('id', '?')
+            print(f"  │ ✨ Created NPC: {name} ({npc_id})")
+        elif tool == "recall_world_events":
+            print(f"  │ 📜 Searching world events: {entry['input'].get('query', '')}")
+        elif tool == "start_conversation":
+            print(f"  │ 💬 Starting conversation with: {entry['input'].get('npc_id', '?')}")
+        elif tool == "check_content_guidelines":
+            print(f"  │ 📋 Checked content guidelines")
+        elif tool == "escalate_to_gm":
+            print(f"  │ 🎬 Escalated to GM: {entry['input'].get('description', '')[:80]}")
         else:
             print(f"  │ 🔧 {tool}")
     print("  └────────────────────────────────────────────\n")
@@ -119,6 +132,79 @@ def print_npc_dialogue(name: str, dialogue: str):
     print(wrap_text(dialogue))
     print(f"{MARGIN}{'─' * 50}")
     print()
+
+
+# Patterns for natural-language command routing (compiled once)
+_TALK_PATTERN = re.compile(
+    r"^(?:talk\s+to|speak\s+(?:to|with)|approach|chat\s+with|go\s+talk\s+to)\s+(.+)$",
+    re.IGNORECASE,
+)
+_EXAMINE_PATTERN = re.compile(
+    r"^(?:examine|inspect|look\s+at|check(?:\s+out)?|study)\s+(?:the\s+)?(.+)$",
+    re.IGNORECASE,
+)
+_LEAVE_PATTERN = re.compile(
+    r"^(?:leave|walk\s+away|step\s+away|goodbye|bye|back)$",
+    re.IGNORECASE,
+)
+
+
+def start_npc_conversation(npc_id: str, gm: GameMaster):
+    """Start a conversation with an NPC. If there are recent scene events,
+    auto-trigger the NPC's first response so they react immediately."""
+    gm.talk_to(npc_id)
+    gm.process_between_turns()
+    name = gm.get_npc_display_name(npc_id)
+    print(f"\n{MARGIN}[You approach {name}.]")
+
+    # If there are scene events, the NPC should react immediately
+    # instead of waiting for the player to speak
+    agent = gm.agents[npc_id]
+    if agent.pending_scene_events:
+        try:
+            dialogue, tool_log = gm.player_say("*approaches*")
+            print_tool_log(tool_log)
+            print_npc_dialogue(name, dialogue)
+        except Exception as e:
+            print(f"\n{MARGIN}[Error: {e}]")
+
+
+def try_natural_route(user_input: str, gm: GameMaster) -> bool:
+    """Try to match natural-language input to a deterministic command.
+    Returns True if routed (caller should `continue`), False to fall through to LLM."""
+
+    # "talk to Lira" → /talk lira
+    m = _TALK_PATTERN.match(user_input)
+    if m and gm.mode == GameMode.FREE_ROAM:
+        name_input = m.group(1).strip()
+        npc_id = gm.resolve_npc(name_input)
+        if npc_id:
+            start_npc_conversation(npc_id, gm)
+            return True
+        # Name didn't resolve — let it fall through to GM LLM
+        return False
+
+    # "examine the fireplace" → /examine fireplace
+    m = _EXAMINE_PATTERN.match(user_input)
+    if m and gm.mode == GameMode.FREE_ROAM:
+        obj = m.group(1).strip()
+        desc = gm.gm.examine(obj)
+        if desc:
+            print_gm_narration(desc)
+            return True
+        # Object not found in YAML — let it fall through to GM LLM
+        return False
+
+    # "leave" / "walk away" → /leave
+    if _LEAVE_PATTERN.match(user_input):
+        if gm.mode == GameMode.NPC_CONVERSATION:
+            transition = gm.leave_conversation()
+            print(f"\n{MARGIN}{transition}")
+            return True
+        # Not in conversation — let it fall through
+        return False
+
+    return False
 
 
 def get_prompt(gm: GameMaster) -> str:
@@ -214,10 +300,7 @@ def main():
                     if not npc_id:
                         print(f"{MARGIN}You don't see anyone by that name. Try /npcs.")
                         continue
-                    gm.talk_to(npc_id)
-                    gm.process_between_turns()
-                    name = gm.get_npc_display_name(npc_id)
-                    print(f"\n{MARGIN}[You approach {name}.]")
+                    start_npc_conversation(npc_id, gm)
 
                 elif cmd in ("/leave", "/back"):
                     if gm.mode == GameMode.NPC_CONVERSATION:
@@ -282,13 +365,42 @@ def main():
 
             # ── Freeform input ───────────────────────────────────
             else:
+                # Try to detect natural-language commands before hitting LLM
+                routed = try_natural_route(user_input, gm)
+                if routed:
+                    continue
+
                 if gm.mode == GameMode.NPC_CONVERSATION and gm.current_npc:
                     # Send to NPC
-                    name = gm.get_npc_display_name(gm.current_npc)
+                    npc_id = gm.current_npc
+                    name = gm.get_npc_display_name(npc_id)
                     try:
                         dialogue, tool_log = gm.player_say(user_input)
                         print_tool_log(tool_log)
                         print_npc_dialogue(name, dialogue)
+
+                        # Check if the NPC escalated to the GM
+                        agent = gm.agents[npc_id]
+                        gm_event = agent.pending_gm_event
+                        if gm_event:
+                            agent.pending_gm_event = None
+                            # End the conversation
+                            transition = gm.leave_conversation()
+                            print(f"\n{MARGIN}{transition}")
+                            # Log scene event and have GM narrate
+                            gm.gm.log_scene_event(
+                                description=gm_event["description"],
+                                actor="player",
+                            )
+                            gm_prompt = (
+                                f"[Scene event: {gm_event['description']}] "
+                                "Narrate the scene reaction."
+                            )
+                            narration, gm_tool_log = gm.free_roam_input(gm_prompt)
+                            print_tool_log(gm_tool_log, source="GM")
+                            if narration:
+                                print_gm_narration(narration)
+
                     except Exception as e:
                         print(f"\n{MARGIN}[Error communicating with {name}: {e}]")
                 else:
@@ -296,7 +408,18 @@ def main():
                     try:
                         narration, tool_log = gm.free_roam_input(user_input)
                         print_tool_log(tool_log, source="GM")
-                        print_gm_narration(narration)
+                        if narration:
+                            print_gm_narration(narration)
+
+                        # Check if the GM triggered a game action
+                        action = gm.gm.pending_action
+                        if action:
+                            gm.gm.pending_action = None
+                            if action["type"] == "talk":
+                                npc_id = action["npc_id"]
+                                if npc_id in gm.agents:
+                                    start_npc_conversation(npc_id, gm)
+
                     except Exception as e:
                         print(f"\n{MARGIN}[Error: {e}]")
 

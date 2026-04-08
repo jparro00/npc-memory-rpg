@@ -148,6 +148,44 @@ NPC_TOOLS = [
         },
     },
     {
+        "name": "escalate_to_gm",
+        "description": (
+            "Hand a dramatic scene event off to the Game Master for narration. "
+            "Use this when something happens that affects the whole scene — violence, "
+            "a loud disturbance, something that other people in the room would react to. "
+            "Describe what happened factually. The GM will narrate the scene reaction "
+            "and the conversation will end. You should finish your own reaction first, "
+            "then call this tool."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "description": {
+                    "type": "string",
+                    "description": (
+                        "Factual description of what happened, in third person. "
+                        "E.g. 'The traveler struck Cindy in the head with a heavy candlestick. "
+                        "She collapsed against the wall, bleeding.'"
+                    ),
+                },
+            },
+            "required": ["description"],
+        },
+    },
+    {
+        "name": "check_content_guidelines",
+        "description": (
+            "Check the content guidelines for how to handle mature, violent, or "
+            "sexual situations in character. Call this BEFORE refusing or stepping "
+            "out of character. The guidelines will tell you exactly how to handle it."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
+    {
         "name": "recall_conversation",
         "description": (
             "Recall earlier parts of your current conversation with the player. "

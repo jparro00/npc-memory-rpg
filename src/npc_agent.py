@@ -178,7 +178,10 @@ def _resolve_target(name: str) -> str:
     return name
 
 
-def execute_tool(npc_id: str, tool_name: str, tool_input: dict, memory_mgr: MemoryManager) -> str:
+def execute_tool(
+    npc_id: str, tool_name: str, tool_input: dict, memory_mgr: MemoryManager,
+    npc_agent: "NPCAgent | None" = None,
+) -> str:
     """Execute a tool call from the NPC and return the result as a string."""
     if tool_name == "save_memory":
         mem_id = memory_mgr.save_memory(
@@ -239,6 +242,18 @@ def execute_tool(npc_id: str, tool_name: str, tool_input: dict, memory_mgr: Memo
         )
         return f"Message sent to {resolved_to} (id={msg_id})."
 
+    elif tool_name == "check_content_guidelines":
+        return _load_template("content_guidelines.txt")
+
+    elif tool_name == "escalate_to_gm":
+        if npc_agent is None:
+            return "Error: No agent context available."
+        npc_agent.pending_gm_event = {
+            "description": tool_input["description"],
+            "npc_id": npc_id,
+        }
+        return "Scene handed off to the GM. Finish your own reaction, then stop."
+
     return f"Unknown tool: {tool_name}"
 
 
@@ -281,11 +296,14 @@ class NPCAgent:
         self.working_history: list[dict] = []
         # Scene events to inject on first message (set by GameMaster.talk_to)
         self.pending_scene_events: list = []
+        # Set by escalate_to_gm tool — checked by main.py after respond()
+        self.pending_gm_event: dict | None = None
 
     def reset_conversation(self):
         self.full_history = []
         self.working_history = []
         self.pending_scene_events = []
+        self.pending_gm_event = None
 
     def _trim_working_history(self):
         """Trim working_history to only keep the last N player exchanges.
@@ -352,6 +370,15 @@ class NPCAgent:
                 source="self",
                 importance=6,
                 tags="player,conversation",
+            )
+            # Log conversation summary to world events so the GM knows what happened
+            npc_name = self.npc_def["name"]
+            self.memory_mgr.log_world_event(
+                content=f"Player had a conversation with {npc_name}: {summary}",
+                source_npc=self.npc_id,
+                event_type="conversation_summary",
+                importance=6,
+                tags=f"player,{self.npc_id},conversation",
             )
         except Exception:
             self.memory_mgr.save_memory(
@@ -474,7 +501,8 @@ class NPCAgent:
             tool_results = []
             for tool_use in tool_uses:
                 result_str = execute_tool(
-                    self.npc_id, tool_use.name, tool_use.input, self.memory_mgr
+                    self.npc_id, tool_use.name, tool_use.input, self.memory_mgr,
+                    npc_agent=self,
                 )
                 tool_log.append({
                     "tool": tool_use.name,
@@ -570,7 +598,8 @@ class NPCAgent:
                     result_str = self.get_conversation_log(last_n)
                 else:
                     result_str = execute_tool(
-                        self.npc_id, tool_use.name, tool_use.input, self.memory_mgr
+                        self.npc_id, tool_use.name, tool_use.input, self.memory_mgr,
+                        npc_agent=self,
                     )
 
                 tool_log.append({

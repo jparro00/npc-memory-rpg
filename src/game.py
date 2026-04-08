@@ -35,7 +35,21 @@ class GameMaster:
             self.agents[npc_id] = NPCAgent(npc_id, self.memory_mgr, self.client)
 
         # Initialize GM agent
-        self.gm = GMAgent(self.memory_mgr, api_key=api_key)
+        self.gm = GMAgent(self.memory_mgr, api_key=api_key, register_npc_fn=self._register_npc)
+
+        # Inject dynamically created NPCs into their locations.
+        # Static NPCs are listed in the location YAML; dynamic NPCs store
+        # their location in their own YAML and need to be added at startup.
+        from . import world_data
+        for npc_id, agent in self.agents.items():
+            loc_field = agent.npc_def.get("location")
+            if loc_field:
+                world_data.add_npc_to_location(loc_field, npc_id)
+
+    def _register_npc(self, npc_id: str):
+        """Register a dynamically created NPC as a live agent."""
+        if npc_id not in self.agents:
+            self.agents[npc_id] = NPCAgent(npc_id, self.memory_mgr, self.client)
 
     def seed_if_needed(self):
         """Seed initial data if the database is empty."""
@@ -64,6 +78,11 @@ class GameMaster:
     def resolve_npc(self, input_str: str) -> str | None:
         """Resolve a player input to an npc_id. Accepts id, full name, or first name (case-insensitive)."""
         key = input_str.lower().strip()
+        # Strip leading articles ("the barkeeper" → "barkeeper")
+        for article in ("the ", "a ", "an "):
+            if key.startswith(article):
+                key = key[len(article):]
+                break
         # Direct id match
         if key in self.agents:
             return key
